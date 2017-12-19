@@ -13,9 +13,9 @@ MAX_REQUIRED_PLAYERS: int = 10
 class GameEngine:
     def __init__(self, players: List[IPlayer], rounds_per_match: int):
         players_count = len(players)
-        self._players: List[IPlayer] = players
         if players_count < MIN_REQUIRED_PLAYERS or players_count > MAX_REQUIRED_PLAYERS:
-            raise ValueError('Amount of players must be at least 2 and cannot exceed 10')
+            raise ValueError(f'Amount of players (currently: {players_count}) must be at least 2 and cannot exceed 10')
+        self._players: List[IPlayer] = players
         self._roundsPerMatch: int = rounds_per_match
         self._deck: List[Card] = GameEngineHelper.create_game_deck()
 
