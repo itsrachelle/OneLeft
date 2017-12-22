@@ -4,6 +4,7 @@ from core.game.GameEngineHelper import GameEngineHelper
 from core.game.PlayerGameHelper import PlayerGameHelper
 from core.game.GamePlayer import GamePlayer
 from typing import List
+from core.game.ActionType import ActionType
 
 INITIAL_HAND_SIZE: int = 7
 MIN_REQUIRED_PLAYERS: int = 2
@@ -18,6 +19,9 @@ class GameEngine:
         self._players: List[IPlayer] = players
         self._roundsPerMatch: int = rounds_per_match
         self._deck: List[Card] = GameEngineHelper.create_game_deck()
+        self.top_card_in_pile: Card = None
+        self.card_played: Card = None
+        self.legal_Response: Card = None
 
     def __get_game_players(self, players: List[IPlayer]) -> List[GamePlayer]:
         game_players = []
@@ -40,6 +44,22 @@ class GameEngine:
         deck_count = len(self._deck)
         opp_hand_count = []
         return PlayerGameHelper(hand, last_card_played, card_pile, deck_count, opp_hand_count)
+
+    def get_legal_response_cards(self, player_game_helper: PlayerGameHelper) -> List[Card]:
+        legal_card_responses: List[Card] = []
+        for current_card in player_game_helper.get_hand():
+            if not self.is_action():
+                if current_card.color_type == self.card_played.color_type \
+                        or current_card.card_type == self.card_played.card_type:
+                    legal_card_responses.append(current_card)
+            else:
+                if self.card_played.color_type != ColorType.BLACK:
+                    if current_card.color_type == self.card_played.color_type:
+                        legal_card_responses.append(current_card)
+                else:
+                    if current_card.card_type == self.card_played.card_type:
+                        legal_card_responses.append(current_card)
+        return legal_card_responses
 
     def start(self):
         current_round: int = 0
@@ -64,6 +84,22 @@ class GameEngine:
                     active_player_game_helper = self.__create_player_game_helper(game_player, last_card_played)
                     game_player.player.set_game_helper(active_player_game_helper)
                     player_action = game_player.player.take_turn()
+
+                    # check what was played is legal and from their hand
+                    if player_action.action == ActionType.PLAY:
+                        legal_responses = self.get_legal_response_cards(game_player.player.get_game_helper())
+                        if player_action.card not in legal_responses:
+                            print('ILLEGAL play or this card is not in your hand, tsk tsk! '
+                                  f'Type: {player_action.card.card_type} Color: {player_action.card.color_type}')
+                            # skip and draw logic here
+                        else:
+                            # IT IS LEGAL remove card from hand
+                            # We need logic to handle actions here too
+                            pass
+                    else:
+                        # skip and draw logic here
+                        pass
+
                     print('{} uses action {}'.format(active_player.get_player_name(), player_action.action))
                     print('{}'.format(player_action.card.get_card_text()))
 
@@ -78,3 +114,18 @@ class GameEngine:
 
         # After all rounds have been played, handle any Match over logic here
         print('Match is over!')
+
+        def is_color_change(self) -> bool:
+
+            if self.top_card_in_pile.color_type == self.card_played.color_type:
+                return False
+            else:
+                return True
+
+        def is_action(self) -> bool:
+
+            if self.card_played.card_type in [CardType.DRAW_TWO, CardType.REVERSE, CardType.SKIP,
+                                              CardType.WILD_DRAW_FOUR, CardType.WILD_DRAW_FOUR]:
+                return True
+            else:
+                return False
