@@ -5,6 +5,8 @@ from core.game.PlayerGameHelper import PlayerGameHelper
 from core.game.GamePlayer import GamePlayer
 from typing import List
 from core.game.ActionType import ActionType
+from core.game.CardType import CardType
+from core.game.ColorType import ColorType
 
 INITIAL_HAND_SIZE: int = 7
 MIN_REQUIRED_PLAYERS: int = 2
@@ -19,9 +21,8 @@ class GameEngine:
         self._players: List[IPlayer] = players
         self._roundsPerMatch: int = rounds_per_match
         self._deck: List[Card] = GameEngineHelper.create_game_deck()
-        self.top_card_in_pile: Card = None
-        self.card_played: Card = None
-        self.legal_Response: Card = None
+        self._top_card_in_pile: Card = None
+        self._card_played: Card = None
 
     def __get_game_players(self, players: List[IPlayer]) -> List[GamePlayer]:
         game_players = []
@@ -49,17 +50,37 @@ class GameEngine:
         legal_card_responses: List[Card] = []
         for current_card in player_game_helper.get_hand():
             if not self.is_action():
-                if current_card.color_type == self.card_played.color_type \
-                        or current_card.card_type == self.card_played.card_type:
+                if current_card.color_type == self._card_played.color_type \
+                        or current_card.card_type == self._card_played.card_type:
                     legal_card_responses.append(current_card)
             else:
-                if self.card_played.color_type != ColorType.BLACK:
-                    if current_card.color_type == self.card_played.color_type:
+                if self._card_played.color_type != ColorType.BLACK:
+                    if current_card.color_type == self._card_played.color_type:
                         legal_card_responses.append(current_card)
                 else:
-                    if current_card.card_type == self.card_played.card_type:
+                    if current_card.card_type == self._card_played.card_type:
                         legal_card_responses.append(current_card)
         return legal_card_responses
+
+    @property
+    def is_color_change(self) -> bool:
+        if self._top_card_in_pile.color_type == self._card_played.color_type:
+            return False
+        else:
+            return True
+
+    def is_action(self) -> bool:
+
+        if self._card_played.card_type in [CardType.DRAW_TWO, CardType.REVERSE, CardType.SKIP,
+                                           CardType.WILD_DRAW_FOUR, CardType.WILD_DRAW_FOUR]:
+            return True
+        else:
+            return False
+
+    def draw_card_to_hand(self, game_player: GamePlayer, amount_to_draw: int):
+        card_drawn = self.__draw_cards(amount_to_draw)
+        # This should work now that I added a setter property on GamePlayer.hand
+        game_player.hand.extend(card_drawn)
 
     def start(self):
         current_round: int = 0
@@ -76,6 +97,7 @@ class GameEngine:
             # Keep playing the same round until a winner is chosen.
             while not round_won:
                 active_player: GamePlayer = None
+                # No matter what the player (easy,hard,etc. we will play the first card from the deck
                 last_card_played = self.__draw_cards(1)
 
                 # Main game loop starts here, loop through each player until a player has 0 cards.
@@ -83,22 +105,34 @@ class GameEngine:
                     active_player = game_player.player
                     active_player_game_helper = self.__create_player_game_helper(game_player, last_card_played)
                     game_player.player.set_game_helper(active_player_game_helper)
-                    player_action = game_player.player.take_turn()
+                    # Check for skip before anything else is done (early exit) <- this is done in legal responses
 
-                    # check what was played is legal and from their hand
+                    current_game_helper = game_player.player.get_game_helper()
+
+                    player_action = game_player.player.take_turn()
+                    self._card_played = player_action.card
+
+                    # check what was played is legal and from their hand AND they aren't skipping
                     if player_action.action == ActionType.PLAY:
-                        legal_responses = self.get_legal_response_cards(game_player.player.get_game_helper())
+                        legal_responses = self.get_legal_response_cards(current_game_helper)
                         if player_action.card not in legal_responses:
-                            print('ILLEGAL play or this card is not in your hand, tsk tsk! '
-                                  f'Type: {player_action.card.card_type} Color: {player_action.card.color_type}')
-                            # skip and draw logic here
+                            print('ILLEGAL play or this card is not in your hand, tsk tsk!\n'
+                                  f'Type: {player_action.card.card_type} Color: {player_action.card.color_type}\n'
+                                  'Drawing a card and skipping your turn instead')
+                            self.draw_card_to_hand(game_player, 1)
+                            continue
                         else:
-                            # IT IS LEGAL remove card from hand
-                            # We need logic to handle actions here too
+                            # IT IS LEGAL remove card from hand (except for skip)
+                            # We need logic to handle actions here too (Draw two, reverse, skip, wild +4, wild
                             pass
                     else:
-                        # skip and draw logic here
-                        pass
+                        if active_player_game_helper.get_last_card_played().card_type == CardType.SKIP:
+                            print("A skip card was played and the player did skip their turn")
+                        else:
+                            # skip and draw logic here
+                            self.draw_card_to_hand(game_player, 1)
+                            print(f'Player drew a card and skipped their turn. Hand is now: {game_player.hand}')
+                            continue
 
                     print('{} uses action {}'.format(active_player.get_player_name(), player_action.action))
                     print('{}'.format(player_action.card.get_card_text()))
@@ -114,18 +148,3 @@ class GameEngine:
 
         # After all rounds have been played, handle any Match over logic here
         print('Match is over!')
-
-        def is_color_change(self) -> bool:
-
-            if self.top_card_in_pile.color_type == self.card_played.color_type:
-                return False
-            else:
-                return True
-
-        def is_action(self) -> bool:
-
-            if self.card_played.card_type in [CardType.DRAW_TWO, CardType.REVERSE, CardType.SKIP,
-                                              CardType.WILD_DRAW_FOUR, CardType.WILD_DRAW_FOUR]:
-                return True
-            else:
-                return False

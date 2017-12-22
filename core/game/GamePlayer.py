@@ -14,9 +14,13 @@ class GamePlayer:
         return self._player
 
     @property
-    def hand(self):
+    def hand(self) -> List[Card]:
         return self._hand
 
     @property
     def player_id(self):
         return self._player_id
+
+    @hand.setter
+    def hand(self, value: List[Card]):
+        self._hand = value

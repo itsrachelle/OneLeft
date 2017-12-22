@@ -9,7 +9,7 @@ from core.game.ActionType import ActionType
 from core.game.ColorType import ColorType
 from core.game.CardType import CardType
 from core.game.Card import Card
-from typing import List
+import random
 
 
 class Player(IPlayer):
@@ -44,11 +44,20 @@ class Player(IPlayer):
         return CardAction(ActionType.PLAY, card)
 
     def get_turn(self):
-        color_changed = self.is_color_change()
-        is_action = self.is_action()
-        if color_changed and is_action == False:
-
-        pass
+        # copied from random
+        last_card_played = self.get_game_helper().get_last_card_played()[0]
+        my_hand = self.get_game_helper().get_hand()
+        matched_cards_on_color = [c for c in my_hand if c.color_type == last_card_played.color_type]
+        matched_cards_on_value = [c for c in my_hand if c.card_type == last_card_played.card_type]
+        wild_cards = [c for c in my_hand if c.card_type == CardType.WILD or c.card_type == CardType.WILD_DRAW_FOUR]
+        if len(matched_cards_on_color) > 0:
+            return CardAction(ActionType.PLAY, random.choice(matched_cards_on_color))
+        elif len(matched_cards_on_value) > 0:
+            return CardAction(ActionType.PLAY, random.choice(matched_cards_on_value))
+        elif len(wild_cards) > 0:
+            return CardAction(ActionType.PLAY, random.choice(wild_cards))
+        else:
+            return CardAction(ActionType.SKIP)
 
     def turn_decider(self) -> Card:
         # try not to play the previous color, since chances are they don't have it
@@ -65,23 +74,7 @@ class Player(IPlayer):
                 if x.color_type != self.top_card_in_pile.color_type and x.card_type != self.top_card_in_pile.card_type:
                     return x
                 elif x.color_type != self.top_card_in_pile.color_type and x.card_type == self.top_card_in_pile.card_type:
-
-    def get_legal_response_cards(self) -> List[Card]:
-        legal_card_responses: List[Card] = []
-        for current_card in self.get_game_helper().get_hand():
-            if not self.is_action():
-                if current_card.color_type == self.card_played.color_type \
-                        or current_card.card_type == self.card_played.card_type:
-                    legal_card_responses.append(current_card)
-            else:
-                if self.card_played.color_type != ColorType.BLACK:
-                    if current_card.color_type == self.card_played.color_type:
-                        legal_card_responses.append(current_card)
-                else:
-                    if current_card.card_type == self.card_played.card_type:
-                        legal_card_responses.append(current_card)
-
-        return legal_card_responses
+                    pass
 
     def process_played_card(self, card_played: Card):
 
@@ -93,18 +86,3 @@ class Player(IPlayer):
         #  need code to determine if color change or action (if both we knows its a wild draw 4)
         else:
             pass  # Colors can be change of color state or action (reverse, skip, draw 2)
-
-    def is_color_change(self) -> bool:
-
-        if self.top_card_in_pile.color_type == self.card_played.color_type:
-            return False
-        else:
-            return True
-
-    def is_action(self) -> bool:
-
-        if self.card_played.card_type in [CardType.DRAW_TWO, CardType.REVERSE, CardType.SKIP,
-                                          CardType.WILD_DRAW_FOUR, CardType.WILD_DRAW_FOUR]:
-            return True
-        else:
-            return False

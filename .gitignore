@@ -47,3 +47,7 @@ com_crashlytics_export_strings.xml
 crashlytics.properties
 crashlytics-build.properties
 fabric.properties
+.idea/misc.xml
+.idea/misc.xml
+.idea/OneLeft.iml
+.idea/workspace.xml
