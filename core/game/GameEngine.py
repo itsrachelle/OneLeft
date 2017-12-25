@@ -7,6 +7,7 @@ from typing import List
 from core.game.ActionType import ActionType
 from core.game.CardType import CardType
 from core.game.ColorType import ColorType
+from random import shuffle
 
 INITIAL_HAND_SIZE: int = 7
 MIN_REQUIRED_PLAYERS: int = 2
@@ -35,11 +36,36 @@ class GameEngine:
             game_players.append(game_player)
         return game_players
 
+    def __shuffle_cards(self):
+        # We want to shuffle the entire card pile except the top one
+        shuffled_card_pile = self._card_pile[:-1]
+        card_pile_after_shuffle = self._card_pile[-1]
+        shuffle(shuffled_card_pile)
+        # We want to set the variables again now that the deck is shuffled
+        self._deck = shuffled_card_pile
+        self._card_pile = card_pile_after_shuffle
+
+    def __is_deck_out_of_cards(self) -> bool:
+        # this is coupled to the players defined in the constructor, which may not the players of the round
+        cards_used_from_deck_count = self._amount_of_cards_used_in_round + self.__get_players_hand_counts(
+            self.__get_game_players(self._players))
+
+        if cards_used_from_deck_count == DECK_SIZE:
+            return True
+        elif cards_used_from_deck_count > DECK_SIZE:
+            print('Morty, *BURP* this isn\'t good, we somehow drew more cards than this universe allows!!??')
+        else:
+            return False
+
     def __draw_cards(self, draw_count: int) -> List[Card]:
+
+        if self.__is_deck_out_of_cards():
+            self.__shuffle_cards()
+
         drawn_cards = []
         for n in range(draw_count):
             drawn_cards.append(self._deck.pop(0))
-        self._amount_of_cards_used_in_round += drawn_cards.count()
+        self._amount_of_cards_used_in_round += len(drawn_cards)
         return drawn_cards
 
     def __create_player_game_helper(self, active_player: GamePlayer, last_card_played: Card):
@@ -83,15 +109,16 @@ class GameEngine:
         else:
             return False
 
-    def draw_card_to_hand(self, game_player: GamePlayer, amount_to_draw: int):
-        card_drawn = self.__draw_cards(amount_to_draw)
-        # This should work now that I added a setter property on GamePlayer.hand
-        game_player.hand.extend(card_drawn)
+    def __draw_card_to_hand(self, game_player: GamePlayer, amount_to_draw: int):
+        cards_drawn = self.__draw_cards(amount_to_draw)
 
-    def get_players_hand_counts(self, players: List[GamePlayer]) -> int:
+        # This should work now that I added a setter property on GamePlayer.hand
+        game_player.hand.extend(cards_drawn)
+
+    def __get_players_hand_counts(self, players: List[GamePlayer]) -> int:
         hand_count = 0
         for player in players:
-            hand_count += player.hand.count()
+            hand_count += len(player.hand)
         return hand_count
 
     def start(self):
@@ -111,7 +138,7 @@ class GameEngine:
 
                 active_player: GamePlayer = None
                 # No matter what the player (easy,hard,etc. we will play the first card from the deck
-                last_card_played = self.__draw_cards(1)
+                last_card_played = self.__draw_cards(1)[0]
                 # Main game loop starts here, loop through each player until a player has 0 cards.
                 for game_player in round_players:
 
@@ -123,11 +150,9 @@ class GameEngine:
                     game_player.player.set_game_helper(active_player_game_helper)
                     current_game_helper = game_player.player.get_game_helper()
 
-                    cards_used_from_deck = self._amount_of_cards_used_in_round + self.get_players_hand_counts(
-                        round_players)
-                    if cards_used_from_deck >= DECK_SIZE:
-                        # reshuffle logic here
-                        pass
+                    amount_of_cards_used_from_deck = self._amount_of_cards_used_in_round \
+                                                     + self.__get_players_hand_counts(round_players)
+
 
                     player_action = game_player.player.take_turn()
 
@@ -140,7 +165,7 @@ class GameEngine:
                             print('ILLEGAL play or this card is not in your hand, tsk tsk!\n'
                                   f'Type: {player_action.card.card_type} Color: {player_action.card.color_type}\n'
                                   'Drawing a card and skipping your turn instead')
-                            self.draw_card_to_hand(game_player, 1)
+                            self.__draw_card_to_hand(game_player, 1)
                             continue
                         else:
                             # This card can be rightfully added to the pile
@@ -153,7 +178,7 @@ class GameEngine:
                             print("A skip card was played and the player did skip their turn")
                         else:
                             # skip and draw logic here
-                            self.draw_card_to_hand(game_player, 1)
+                            self.__draw_card_to_hand(game_player, 1)
                             print(f'Player drew a card and skipped their turn. Hand is now: {game_player.hand}')
                             continue
 
