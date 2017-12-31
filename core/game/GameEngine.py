@@ -25,8 +25,11 @@ class GameEngine:
         self._deck: List[Card] = GameEngineHelper.create_game_deck()
         self._amount_of_cards_used_in_round: int = 0
         self._top_card_in_pile: Card = None
+        # Card played in turn
         self._card_played: Card = None
         self._card_pile: List[Card] = []
+        # To be used to catch possible stack overflow
+        self._repetition_count: int = 0
 
     def __get_game_players(self, players: List[IPlayer]) -> List[GamePlayer]:
         game_players = []
@@ -47,8 +50,8 @@ class GameEngine:
 
     def __is_deck_out_of_cards(self) -> bool:
         # this is coupled to the players defined in the constructor, which may not the players of the round
-        cards_used_from_deck_count = self._amount_of_cards_used_in_round + self.__get_players_hand_counts(
-            self.__get_game_players(self._players))
+        cards_used_from_deck_count = self._amount_of_cards_used_in_round + \
+                                     self.__get_players_hand_counts(self.__get_game_players(self._players))
 
         if cards_used_from_deck_count == DECK_SIZE:
             return True
@@ -78,33 +81,47 @@ class GameEngine:
         opp_hand_count = []
         return PlayerGameHelper(hand, last_card_played, card_pile, deck_count, opp_hand_count)
 
-    def get_legal_response_cards(self, player_game_helper: PlayerGameHelper) -> List[Card]:
+    def __get_legal_response_cards(self, player_game_helper: PlayerGameHelper) -> List[Card]:
+        last_card_played = player_game_helper.get_last_card_played()
         legal_card_responses: List[Card] = []
         for current_card in player_game_helper.get_hand():
-            if not self.is_action():
-                if current_card.color_type == self._card_played.color_type \
-                        or current_card.card_type == self._card_played.card_type:
+            if not self.__is_action(last_card_played):
+                # It has to match either color or number
+                if current_card.color_type == last_card_played.color_type \
+                        or current_card.card_type == last_card_played.card_type:
                     legal_card_responses.append(current_card)
             else:
-                if self._card_played.color_type != ColorType.BLACK:
-                    if current_card.color_type == self._card_played.color_type:
+                if last_card_played.card_type == CardType.WILD_DRAW_FOUR:
+                    # If a wild card +4 was played, you can only play that card
+                    if current_card.card_type == last_card_played.card_type:
+                        legal_card_responses.append(current_card)
+                elif last_card_played.color_type == ColorType.BLACK \
+                        and last_card_played.card_type == CardType.WILD:
+                    # If a wild card was played, but no color was chosen
+                    print(f'Wild card was played, but no color type was declared!')
+                    return legal_card_responses
+                elif last_card_played.color_type != ColorType.BLACK \
+                        and last_card_played.card_type == CardType.WILD:
+                    # If a wild card was played, you can only play cards of the color declared
+                    if current_card.color_type == last_card_played.color_type:
                         legal_card_responses.append(current_card)
                 else:
-                    if current_card.card_type == self._card_played.card_type:
+                    # If a draw, reverse/skip, skip - you can only play the same card back
+                    # or draw/skip your turn
+                    if current_card.card_type == last_card_played.card_type:
                         legal_card_responses.append(current_card)
         return legal_card_responses
 
-    @property
-    def is_color_change(self) -> bool:
+    def __is_color_change(self) -> bool:
         if self._top_card_in_pile.color_type == self._card_played.color_type:
             return False
         else:
             return True
 
-    def is_action(self) -> bool:
+    def __is_action(self, card: Card) -> bool:
 
-        if self._card_played.card_type in [CardType.DRAW_TWO, CardType.REVERSE, CardType.SKIP,
-                                           CardType.WILD_DRAW_FOUR, CardType.WILD_DRAW_FOUR]:
+        if card.card_type in [CardType.DRAW_TWO, CardType.REVERSE, CardType.SKIP,
+                              CardType.WILD, CardType.WILD_DRAW_FOUR]:
             return True
         else:
             return False
@@ -137,8 +154,12 @@ class GameEngine:
             while not round_won:
 
                 active_player: GamePlayer = None
+
                 # No matter what the player (easy,hard,etc. we will play the first card from the deck
+                # We need to check that the first card if is an action card isn't a wild or draw four.
+                # This should probably call a different method that uses __draw but has a check for this
                 last_card_played = self.__draw_cards(1)[0]
+
                 # Main game loop starts here, loop through each player until a player has 0 cards.
                 for game_player in round_players:
 
@@ -153,29 +174,51 @@ class GameEngine:
                     amount_of_cards_used_from_deck = self._amount_of_cards_used_in_round \
                                                      + self.__get_players_hand_counts(round_players)
 
-
                     player_action = game_player.player.take_turn()
 
                     self._card_played = player_action.card
 
                     # check what was played is legal and from their hand AND they aren't skipping
                     if player_action.action == ActionType.PLAY:
-                        legal_responses = self.get_legal_response_cards(current_game_helper)
+                        legal_responses = self.__get_legal_response_cards(current_game_helper)
                         if player_action.card not in legal_responses:
-                            print('ILLEGAL play or this card is not in your hand, tsk tsk!\n'
-                                  f'Type: {player_action.card.card_type} Color: {player_action.card.color_type}\n'
-                                  'Drawing a card and skipping your turn instead')
-                            self.__draw_card_to_hand(game_player, 1)
-                            continue
+                            # Logic here to draw, reverse/skip, skip in they don't respond with a matching card
+                            if last_card_played.card_type in [CardType.DRAW_TWO, CardType.REVERSE,
+                                                              CardType.SKIP, CardType.WILD_DRAW_FOUR]:
+                                print(f'You don''t have this card in your hand: {self.last_card_played.card_type}')
+                                if last_card_played.card_type in [CardType.SKIP, CardType.REVERSE]:
+                                    print('You have to skip your turn')
+                                    continue
+                                elif last_card_played.card_type in [CardType.DRAW_TWO, CardType.WILD_DRAW_FOUR]:
+                                    print('You have to draw and skip your turn')
+                                    if last_card_played.card_type == CardType.DRAW_TWO:
+                                        self.__draw_card_to_hand(game_player, 2)
+                                    else:
+                                        self.__draw_card_to_hand(game_player, 4)
+                                    continue
+                            else:
+                                print('ILLEGAL play or this card is not in your hand, tsk tsk!\n'
+                                      f'Type: {player_action.card.card_type} Color: {player_action.card.color_type}\n'
+                                      'Drawing a card and skipping your turn instead')
+                                self.__draw_card_to_hand(game_player, 1)
+                                continue
                         else:
                             # This card can be rightfully added to the pile
-                            self._card_pile.append(last_card_played)
-                            # IT IS LEGAL remove card from hand (except for skip)
-                            # We need logic to handle actions here too (Draw two, reverse, skip, wild +4, wild
-                            pass
+                            self._card_pile.append(self._card_played)
+                            last_card_played = self._card_played
+                            # IT IS LEGAL remove card from hand (Draw two, reverse, skip, wild +4, wild)
+
+                            # We need logic to handle actions here too
+                            # Reverse (aka skip in two player. Take another turn unless they play the same card)
+                            # Draw two (draw method with 2 as param)
+                            # Skip (See Reverse)
+                            # Wild
+                            # Wild +4
                     else:
-                        if active_player_game_helper.get_last_card_played().card_type == CardType.SKIP:
+                        if last_card_played == CardType.SKIP:
                             print("A skip card was played and the player did skip their turn")
+                        elif last_card_played == CardType.REVERSE:
+                            print("A reverse card was played and the player did skip their turn")
                         else:
                             # skip and draw logic here
                             self.__draw_card_to_hand(game_player, 1)
