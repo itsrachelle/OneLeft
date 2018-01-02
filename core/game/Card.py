@@ -22,5 +22,9 @@ class Card:
     def color_type(self) -> ColorType:
         return self._color_type
 
+    @color_type.setter
+    def color_type(self, value: ColorType):
+        self._color_type = value
+
     def get_card_text(self) -> str:
         return '{} {}'.format(self._color_type, self.color_type)

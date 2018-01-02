@@ -2,6 +2,7 @@ from core.game.Card import Card
 from core.game.ColorType import ColorType
 from core.game.CardType import CardType
 from typing import List
+from random import shuffle
 
 WILD_CARD_COUNT = 4
 ACTION_CARD_COUNT = 3
@@ -24,6 +25,7 @@ class GameEngineHelper:
                     else:
                         for n in range(COLOR_CARD_COUNT):
                             deck.append(Card(card_type, color_type))
+        shuffle(deck)
         return deck
 
     @staticmethod

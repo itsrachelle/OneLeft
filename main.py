@@ -5,7 +5,11 @@ from Player import Player
 # from players.MediumPlayer import Player as MediumPlayer
 from players.RandomPlayer import RandomPlayer
 
-players = [Player(), RandomPlayer()]
+players = [RandomPlayer(), RandomPlayer()]
 
-game_engine = GameEngine(players, 10)
+rounds = 3
+# Rounds can't be even, we don't want ties
+if rounds % 2 == 0:
+    rounds += 1
+game_engine = GameEngine(players, rounds)
 game_engine.start()

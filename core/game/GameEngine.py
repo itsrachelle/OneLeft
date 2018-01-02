@@ -35,36 +35,43 @@ class GameEngine:
     def __get_game_players(self, players: List[IPlayer]) -> List[GamePlayer]:
         game_players = []
         for index, player in enumerate(players):
-            player_hand = self.__draw_cards(INITIAL_HAND_SIZE)
+            player_hand = self.__draw_cards(INITIAL_HAND_SIZE, True)
             game_player = GamePlayer(player, player_hand, index)
             game_players.append(game_player)
         return game_players
 
     def __shuffle_cards(self):
         # We want to shuffle the entire card pile except the top one
-        shuffled_card_pile = self._card_pile[:-1]
+        shuffled_card_pile: List[Card] = self._card_pile[:-1]
         card_pile_after_shuffle = self._card_pile[-1]
         shuffle(shuffled_card_pile)
         # We want to set the variables again now that the deck is shuffled
         self._deck = shuffled_card_pile
-        self._card_pile = card_pile_after_shuffle
+        self._card_pile = [card_pile_after_shuffle]
+        self._amount_of_cards_used_in_round = len(self._card_pile)
 
-    def __is_deck_out_of_cards(self) -> bool:
-        # this is coupled to the players defined in the constructor, which may not the players of the round
-        cards_used_from_deck_count = self._amount_of_cards_used_in_round + \
-                                     self.__get_players_hand_counts(self.__get_game_players(self._players))
+    def __is_deck_out_of_cards(self, amount_to_be_drawn: int = 0) -> bool:
+
+        player_hand_count = self.__get_players_hand_counts(self._players)
+
+        # this is coupled to the players defined in the constructor, which may not be the players of the round
+        cards_used_from_deck_count = self._amount_of_cards_used_in_round + player_hand_count
 
         if cards_used_from_deck_count == DECK_SIZE:
             return True
+        elif cards_used_from_deck_count + amount_to_be_drawn > DECK_SIZE:
+            return True
         elif cards_used_from_deck_count > DECK_SIZE:
             print('Morty, *BURP* this isn\'t good, we somehow drew more cards than this universe allows!!??')
+            return True
         else:
             return False
 
-    def __draw_cards(self, draw_count: int) -> List[Card]:
-
-        if self.__is_deck_out_of_cards():
-            self.__shuffle_cards()
+    def __draw_cards(self, draw_count: int, initial_hand_draw: bool = False) -> List[Card]:
+        # We don't need to worry about checking deck size at the beginning of the game
+        if not initial_hand_draw:
+            if self.__is_deck_out_of_cards(draw_count):
+                self.__shuffle_cards()
 
         drawn_cards = []
         for n in range(draw_count):
@@ -75,19 +82,19 @@ class GameEngine:
     def __first_card_draw(self) -> [Card]:
         # No matter what the player (easy,hard,etc. we will play the first card from the deck
         # We need to check that the first card if is an action card isn't a wild or wild draw four.
-        card_drawn = self.__draw_cards(1)[0]
+        card_drawn = self.__draw_cards(1, True)[0]
         while card_drawn.card_type in [CardType.WILD, CardType.WILD_DRAW_FOUR]:
             # Put back in deck at end
             self._deck.append(card_drawn)
             # Update deck size tracker
             self._amount_of_cards_used_in_round -= 1
             # Try again
-            card_drawn = self.__draw_cards(1)[0]
+            card_drawn = self.__draw_cards(1, True)[0]
         return card_drawn
 
     def __create_player_game_helper(self, active_player: GamePlayer, last_card_played: Card):
         hand = active_player.hand
-        last_card_played = last_card_played
+        self.last_card_played = last_card_played
         # we should check before we append
         self._card_pile.append(last_card_played)
         card_pile = self._card_pile
@@ -104,6 +111,9 @@ class GameEngine:
                 if current_card.color_type == last_card_played.color_type \
                         or current_card.card_type == last_card_played.card_type:
                     legal_card_responses.append(current_card)
+                if current_card.card_type in [CardType.WILD_DRAW_FOUR, CardType.WILD]:
+                    # If it is not an action, we can always play any Wild card
+                    legal_card_responses.append(current_card)
             else:
                 if last_card_played.card_type == CardType.WILD_DRAW_FOUR:
                     # If a wild card +4 was played, you can only play that card
@@ -112,7 +122,7 @@ class GameEngine:
                 elif last_card_played.color_type == ColorType.BLACK \
                         and last_card_played.card_type == CardType.WILD:
                     # If a wild card was played, but no color was chosen
-                    print(f'Wild card was played, but no color type was declared!')
+                    print('Wild card was played, but no color type was declared!')
                     return legal_card_responses
                 elif last_card_played.color_type != ColorType.BLACK \
                         and last_card_played.card_type == CardType.WILD:
@@ -146,10 +156,10 @@ class GameEngine:
         # This should work now that I added a setter property on GamePlayer.hand
         game_player.hand.extend(cards_drawn)
 
-    def __get_players_hand_counts(self, players: List[GamePlayer]) -> int:
+    def __get_players_hand_counts(self, players: List[IPlayer]) -> int:
         hand_count = 0
         for player in players:
-            hand_count += len(player.hand)
+            hand_count += len(player.get_game_helper().get_hand())
         return hand_count
 
     def __determine_winner(self, winning_player_ids: List[int]) -> int:
@@ -157,7 +167,7 @@ class GameEngine:
         max_occurrence_count = max(dict_of_occurrences.values())
         for value, occurrence_count in dict_of_occurrences.items():
             if occurrence_count == max_occurrence_count:
-                print('Player with id {} won the macth!!'.format(value))
+                print('Player with id {} won the match!!'.format(value))
                 return value
 
     def start(self) -> int:
@@ -200,7 +210,8 @@ class GameEngine:
                             # Logic here to draw, reverse/skip, skip in they don't respond with a matching card
                             if last_card_played.card_type in [CardType.DRAW_TWO, CardType.REVERSE,
                                                               CardType.SKIP, CardType.WILD_DRAW_FOUR]:
-                                print(f'You don''t have this card in your hand: {self.last_card_played.card_type}')
+                                print('You don''t have this card in your hand: {}'
+                                      .format(self.last_card_played.card_type.value))
                                 if last_card_played.card_type in [CardType.SKIP, CardType.REVERSE]:
                                     print('You have to skip your turn')
                                     continue
@@ -212,9 +223,12 @@ class GameEngine:
                                         self.__draw_card_to_hand(game_player, 4)
                                     continue
                             else:
-                                print('ILLEGAL play or this card is not in your hand, tsk tsk!\n'
-                                      f'Type: {player_action.card.card_type} Color: {player_action.card.color_type}\n'
-                                      'Drawing a card and skipping your turn instead')
+                                if player_action.card is None:
+                                    print('ERROR')
+                                if player_action.card.card_type is not None:
+                                    print('ILLEGAL play or this card is not in your hand, tsk tsk!\n'
+                                          'Type: {}  \n Drawing a card and skipping your turn instead'
+                                          .format(player_action.card.card_type.value))
                                 self.__draw_card_to_hand(game_player, 1)
                                 continue
                         else:
@@ -222,6 +236,12 @@ class GameEngine:
                             # This card can be rightfully added to the pile
                             self._card_pile.append(self._card_played)
                             last_card_played = self._card_played
+                            # Remove the card from the player's hand
+                            for index, card in enumerate(game_player.hand):
+                                if card.card_type == last_card_played.card_type \
+                                        and card.color_type == last_card_played.color_type:
+                                    del game_player.hand[index]
+                                    break
 
                     else:
                         if last_card_played == CardType.SKIP:
@@ -231,14 +251,11 @@ class GameEngine:
                         else:
                             # skip and draw logic here
                             self.__draw_card_to_hand(game_player, 1)
-                            print(f'Player drew a card and skipped their turn. Hand is now: {game_player.hand}')
+                            print('Player drew a card and skipped their turn')
                             continue
 
                     print('{} uses action {}'.format(active_player.get_player_name(), player_action.action))
                     print('{}'.format(player_action.card.get_card_text()))
-
-                    # Until game loop is actually implemented, remove a card from the player's hand.
-                    game_player.hand.pop()
 
                     # After the card has been played, if that player has no more cards, they win the round.
                     if len(game_player.hand) <= 0:
