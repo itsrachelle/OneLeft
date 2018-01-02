@@ -27,4 +27,4 @@ class Card:
         self._color_type = value
 
     def get_card_text(self) -> str:
-        return '{} {}'.format(self._color_type, self.color_type)
+        return '{} {}'.format(self._color_type, self.card_type)

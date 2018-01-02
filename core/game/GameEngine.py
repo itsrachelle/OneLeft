@@ -32,7 +32,7 @@ class GameEngine:
         # To be used to catch possible stack overflow
         self._repetition_count: int = 0
 
-    def __get_game_players(self, players: List[IPlayer]) -> List[GamePlayer]:
+    def __get_and_create_game_players(self, players: List[IPlayer]) -> List[GamePlayer]:
         game_players = []
         for index, player in enumerate(players):
             player_hand = self.__draw_cards(INITIAL_HAND_SIZE, True)
@@ -159,7 +159,8 @@ class GameEngine:
     def __get_players_hand_counts(self, players: List[IPlayer]) -> int:
         hand_count = 0
         for player in players:
-            hand_count += len(player.get_game_helper().get_hand())
+            if hasattr(player.get_game_helper(), 'get_hand'):
+                hand_count += len(player.get_game_helper().get_hand())
         return hand_count
 
     def __determine_winner(self, winning_player_ids: List[int]) -> int:
@@ -175,8 +176,9 @@ class GameEngine:
         round_winners_player_ids: List[int] = []
         while current_round <= self._roundsPerMatch:
             # At the beginning of every round, get a fresh list of players and reset round variables.
-            round_players = self.__get_game_players(self._players)
+            round_players = self.__get_and_create_game_players(self._players)
             self._deck = GameEngineHelper.create_game_deck()
+            self._amount_of_cards_used_in_round = 0
             current_round += 1
             round_won = False
             print('- Round {0}'.format(current_round))
