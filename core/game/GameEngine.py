@@ -8,6 +8,7 @@ from core.game.ActionType import ActionType
 from core.game.CardType import CardType
 from core.game.ColorType import ColorType
 from random import shuffle
+from collections import Counter
 
 INITIAL_HAND_SIZE: int = 7
 MIN_REQUIRED_PLAYERS: int = 2
@@ -70,6 +71,19 @@ class GameEngine:
             drawn_cards.append(self._deck.pop(0))
         self._amount_of_cards_used_in_round += len(drawn_cards)
         return drawn_cards
+
+    def __first_card_draw(self) -> [Card]:
+        # No matter what the player (easy,hard,etc. we will play the first card from the deck
+        # We need to check that the first card if is an action card isn't a wild or wild draw four.
+        card_drawn = self.__draw_cards(1)[0]
+        while card_drawn.card_type in [CardType.WILD, CardType.WILD_DRAW_FOUR]:
+            # Put back in deck at end
+            self._deck.append(card_drawn)
+            # Update deck size tracker
+            self._amount_of_cards_used_in_round -= 1
+            # Try again
+            card_drawn = self.__draw_cards(1)[0]
+        return card_drawn
 
     def __create_player_game_helper(self, active_player: GamePlayer, last_card_played: Card):
         hand = active_player.hand
@@ -138,16 +152,23 @@ class GameEngine:
             hand_count += len(player.hand)
         return hand_count
 
-    def start(self):
-        current_round: int = 0
+    def __determine_winner(self, winning_player_ids: List[int]) -> int:
+        dict_of_occurrences = Counter(winning_player_ids)
+        max_occurrence_count = max(dict_of_occurrences.values())
+        for value, occurrence_count in dict_of_occurrences.items():
+            if occurrence_count == max_occurrence_count:
+                print('Player with id {} won the macth!!'.format(value))
+                return value
 
+    def start(self) -> int:
+        current_round: int = 0
+        round_winners_player_ids: List[int] = []
         while current_round <= self._roundsPerMatch:
             # At the beginning of every round, get a fresh list of players and reset round variables.
             round_players = self.__get_game_players(self._players)
             self._deck = GameEngineHelper.create_game_deck()
             current_round += 1
             round_won = False
-            round_winner = None
             print('- Round {0}'.format(current_round))
 
             # Keep playing the same round until a winner is chosen.
@@ -155,10 +176,7 @@ class GameEngine:
 
                 active_player: GamePlayer = None
 
-                # No matter what the player (easy,hard,etc. we will play the first card from the deck
-                # We need to check that the first card if is an action card isn't a wild or draw four.
-                # This should probably call a different method that uses __draw but has a check for this
-                last_card_played = self.__draw_cards(1)[0]
+                last_card_played = self.__first_card_draw()
 
                 # Main game loop starts here, loop through each player until a player has 0 cards.
                 for game_player in round_players:
@@ -170,9 +188,6 @@ class GameEngine:
                     # PlayerGameHelper is only for this turn for this player
                     game_player.player.set_game_helper(active_player_game_helper)
                     current_game_helper = game_player.player.get_game_helper()
-
-                    amount_of_cards_used_from_deck = self._amount_of_cards_used_in_round \
-                                                     + self.__get_players_hand_counts(round_players)
 
                     player_action = game_player.player.take_turn()
 
@@ -203,17 +218,11 @@ class GameEngine:
                                 self.__draw_card_to_hand(game_player, 1)
                                 continue
                         else:
+                            # IT IS LEGAL remove card from hand (Except: draw two, reverse, skip, wild +4, wild)
                             # This card can be rightfully added to the pile
                             self._card_pile.append(self._card_played)
                             last_card_played = self._card_played
-                            # IT IS LEGAL remove card from hand (Draw two, reverse, skip, wild +4, wild)
 
-                            # We need logic to handle actions here too
-                            # Reverse (aka skip in two player. Take another turn unless they play the same card)
-                            # Draw two (draw method with 2 as param)
-                            # Skip (See Reverse)
-                            # Wild
-                            # Wild +4
                     else:
                         if last_card_played == CardType.SKIP:
                             print("A skip card was played and the player did skip their turn")
@@ -235,7 +244,8 @@ class GameEngine:
                     if len(game_player.hand) <= 0:
                         round_won = True
                         print('{} won the round!'.format(active_player.get_player_name()))
-                        round_winner = active_player
+                        round_winners_player_ids.append(game_player.player_id)
 
         # After all rounds have been played, handle any Match over logic here
         print('Match is over!')
+        return self.__determine_winner(round_winners_player_ids)
