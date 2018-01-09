@@ -31,6 +31,8 @@ class GameEngine:
         self._card_pile: List[Card] = []
         # To be used to catch possible stack overflow
         self._repetition_count: int = 0
+        # To be used to track stacked draws
+        self._stacked_draw_card_count: int = 0
 
     def __get_and_create_game_players(self, players: List[IPlayer]) -> List[GamePlayer]:
         game_players = []
@@ -90,13 +92,13 @@ class GameEngine:
             self._amount_of_cards_used_in_round -= 1
             # Try again
             card_drawn = self.__draw_cards(1, True)[0]
+        # This is the first card in the card pile
+        self._card_pile.append(card_drawn)
         return card_drawn
 
-    def __create_player_game_helper(self, active_player: GamePlayer, last_card_played: Card):
+    def __create_player_game_helper(self, active_player: GamePlayer):
         hand = active_player.hand
-        self.last_card_played = last_card_played
-        # we should check before we append
-        self._card_pile.append(last_card_played)
+        last_card_played = self._card_pile[-1]
         card_pile = self._card_pile
         deck_count = len(self._deck)
         opp_hand_count = []
@@ -161,17 +163,31 @@ class GameEngine:
         for player in players:
             if hasattr(player.get_game_helper(), 'get_hand'):
                 hand_count += len(player.get_game_helper().get_hand())
+            else:
+                print('Uhhh this player has no hand.... ')
         return hand_count
 
-    def __determine_winner(self, winning_player_ids: List[int]) -> int:
+    def __determine_winner(self, winning_player_ids: List[int]) -> GamePlayer:
         dict_of_occurrences = Counter(winning_player_ids)
         max_occurrence_count = max(dict_of_occurrences.values())
         for value, occurrence_count in dict_of_occurrences.items():
             if occurrence_count == max_occurrence_count:
                 print('Player with id {} won the match!!'.format(value))
-                return value
+                for game_player in self.__get_and_create_game_players(self._players):
+                    if game_player.player_id == value:
+                        return game_player
+        print('Oddly enough, we cannot figure out the player that won?!?!? \nReturning the first player...')
+        return self.__get_and_create_game_players(self._players)[0]
 
-    def start(self) -> int:
+    def __handle_stacked_draws(self, game_player: GamePlayer):
+        # Needs to handle stacked draws
+        self._stacked_draw_card_count = 0
+
+    def __handle_reverse(self):
+        # Needs implementation
+        pass
+
+    def start(self) -> GamePlayer:
         current_round: int = 0
         round_winners_player_ids: List[int] = []
         while current_round <= self._roundsPerMatch:
@@ -179,6 +195,7 @@ class GameEngine:
             round_players = self.__get_and_create_game_players(self._players)
             self._deck = GameEngineHelper.create_game_deck()
             self._amount_of_cards_used_in_round = 0
+            self._card_pile = []
             current_round += 1
             round_won = False
             print('- Round {0}'.format(current_round))
@@ -188,42 +205,49 @@ class GameEngine:
 
                 active_player: GamePlayer = None
 
-                last_card_played = self.__first_card_draw()
+                self.__first_card_draw()
 
+                # Use while loop since we are missing with the order of round_players
+                # Examples: Reverses in > 2 players and Draw 4s
                 # Main game loop starts here, loop through each player until a player has 0 cards.
-                for game_player in round_players:
+                i = 0
+                while i < len(round_players):
 
-                    active_player = game_player.player
+                    active_player = round_players[i].player
 
                     # create PlayerGameHelper
-                    active_player_game_helper = self.__create_player_game_helper(game_player, last_card_played)
+                    active_player_game_helper = self.__create_player_game_helper(round_players[i])
                     # PlayerGameHelper is only for this turn for this player
-                    game_player.player.set_game_helper(active_player_game_helper)
-                    current_game_helper = game_player.player.get_game_helper()
+                    round_players[i].player.set_game_helper(active_player_game_helper)
+                    current_game_helper = round_players[i].player.get_game_helper()
 
-                    player_action = game_player.player.take_turn()
-
+                    last_card_played = self._card_pile[-1]
+                    player_action = round_players[i].player.take_turn()
                     self._card_played = player_action.card
 
                     # check what was played is legal and from their hand AND they aren't skipping
                     if player_action.action == ActionType.PLAY:
                         legal_responses = self.__get_legal_response_cards(current_game_helper)
                         if player_action.card not in legal_responses:
-                            # Logic here to draw, reverse/skip, skip in they don't respond with a matching card
+                            # Logic here to draw, reverse/skip, skip in case they don't respond with a matching card
                             if last_card_played.card_type in [CardType.DRAW_TWO, CardType.REVERSE,
                                                               CardType.SKIP, CardType.WILD_DRAW_FOUR]:
                                 print('You don''t have this card in your hand: {}'
                                       .format(self.last_card_played.card_type.value))
                                 if last_card_played.card_type in [CardType.SKIP, CardType.REVERSE]:
+                                    # Reverse logic here for > 2 ppl game and stacked Reverses
                                     print('You have to skip your turn')
-                                    continue
+
                                 elif last_card_played.card_type in [CardType.DRAW_TWO, CardType.WILD_DRAW_FOUR]:
                                     print('You have to draw and skip your turn')
+                                    # Draw logic if stack Draws
                                     if last_card_played.card_type == CardType.DRAW_TWO:
-                                        self.__draw_card_to_hand(game_player, 2)
+                                        self.__draw_card_to_hand(round_players[i], 2)
                                     else:
-                                        self.__draw_card_to_hand(game_player, 4)
-                                    continue
+                                        self.__draw_card_to_hand(round_players[i], 4)
+
+                                self.__handle_stacked_draws(round_players[i])
+                                continue
                             else:
                                 if player_action.card is None:
                                     print('ERROR')
@@ -231,39 +255,58 @@ class GameEngine:
                                     print('ILLEGAL play or this card is not in your hand, tsk tsk!\n'
                                           'Type: {}  \n Drawing a card and skipping your turn instead'
                                           .format(player_action.card.card_type.value))
-                                self.__draw_card_to_hand(game_player, 1)
+                                self.__draw_card_to_hand(round_players[i], 1)
+
+                                self.__handle_stacked_draws(round_players[i])
                                 continue
                         else:
                             # IT IS LEGAL remove card from hand (Except: draw two, reverse, skip, wild +4, wild)
                             # This card can be rightfully added to the pile
                             self._card_pile.append(self._card_played)
-                            last_card_played = self._card_played
-                            # Remove the card from the player's hand
-                            for index, card in enumerate(game_player.hand):
-                                if card.card_type == last_card_played.card_type \
-                                        and card.color_type == last_card_played.color_type:
-                                    del game_player.hand[index]
-                                    break
+                            # We can stack Reverses and Draw +4(Wild)/+2 cards
+                            if last_card_played.card_type == player_action.card.card_type:
+                                if last_card_played.card_type \
+                                        and self._card_played.card_type in [CardType.DRAW_TWO, CardType.WILD_DRAW_FOUR]:
+                                    self._stacked_draw_card_count += 1
+                                if len(round_players) > 2 \
+                                        and last_card_played.card_type == CardType.REVERSE \
+                                        and self._card_played.card_type == CardType.REVERSE:
+                                    # encapsulate in handle reverse
+                                    new_end_of_list = round_players[i]
+                                    first_reversed_list = list(reversed(round_players[:i]))
+                                    second_reversed_list = list(reversed(round_players[i + 1:]))
+                                    first_reversed_list.extend(second_reversed_list)
+                                    first_reversed_list.append(new_end_of_list)
+                                    round_players = first_reversed_list
 
+                        # Remove the card from the player's hand
+                        for index, card in enumerate(round_players[i].hand):
+                            if card.card_type == self._card_played.card_type \
+                                    and card.color_type == self._card_played.color_type:
+                                del round_players[i].hand[index]
+                                break
+
+                else:
+                    if last_card_played == CardType.SKIP:
+                        print("A skip card was played and the player did skip their turn")
+                    elif last_card_played == CardType.REVERSE:
+                        # Reverse logic here for > 2 ppl game
+                        print("A reverse card was played and the player did skip their turn")
                     else:
-                        if last_card_played == CardType.SKIP:
-                            print("A skip card was played and the player did skip their turn")
-                        elif last_card_played == CardType.REVERSE:
-                            print("A reverse card was played and the player did skip their turn")
-                        else:
-                            # skip and draw logic here
-                            self.__draw_card_to_hand(game_player, 1)
-                            print('Player drew a card and skipped their turn')
-                            continue
+                        # skip and draw logic here
+                        self.__draw_card_to_hand(round_players[i], 1)
+                        print('Player drew a card and skipped their turn')
+                        self.__handle_stacked_draws(round_players[i])
+                        continue
 
-                    print('{} uses action {}'.format(active_player.get_player_name(), player_action.action))
-                    print('{}'.format(player_action.card.get_card_text()))
+                print('{} uses action {}'.format(active_player.get_player_name(), player_action.action))
+                print('{}'.format(player_action.card.get_card_text()))
 
-                    # After the card has been played, if that player has no more cards, they win the round.
-                    if len(game_player.hand) <= 0:
-                        round_won = True
-                        print('{} won the round!'.format(active_player.get_player_name()))
-                        round_winners_player_ids.append(game_player.player_id)
+                # After the card has been played, if that player has no more cards, they win the round.
+                if len(round_players[i].hand) <= 0:
+                    round_won = True
+                    print('{} won the round!'.format(active_player.get_player_name()))
+                    round_winners_player_ids.append(round_players[i].player_id)
 
         # After all rounds have been played, handle any Match over logic here
         print('Match is over!')
