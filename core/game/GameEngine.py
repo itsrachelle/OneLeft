@@ -32,7 +32,8 @@ class GameEngine:
         # To be used to catch possible stack overflow
         self._repetition_count: int = 0
         # To be used to track stacked draws
-        self._stacked_draw_card_count: int = 0
+        self._are_draw_cards_stacked: bool = False
+        self._did_player_skip: bool = False
 
     def __get_and_create_game_players(self, players: List[IPlayer]) -> List[GamePlayer]:
         game_players = []
@@ -105,7 +106,7 @@ class GameEngine:
         return PlayerGameHelper(hand, last_card_played, card_pile, deck_count, opp_hand_count)
 
     def __get_legal_response_cards(self, player_game_helper: PlayerGameHelper) -> List[Card]:
-        last_card_played = player_game_helper.get_last_card_played()
+        last_card_played = self._card_pile[-1]
         legal_card_responses: List[Card] = []
         for current_card in player_game_helper.get_hand():
             if not self.__is_action(last_card_played):
@@ -124,18 +125,30 @@ class GameEngine:
                 elif last_card_played.color_type == ColorType.BLACK \
                         and last_card_played.card_type == CardType.WILD:
                     # If a wild card was played, but no color was chosen
+                    # This should be handled before we get here: choose a color at random
                     print('Wild card was played, but no color type was declared!')
                     return legal_card_responses
                 elif last_card_played.color_type != ColorType.BLACK \
                         and last_card_played.card_type == CardType.WILD:
                     # If a wild card was played, you can only play cards of the color declared
-                    if current_card.color_type == last_card_played.color_type:
+                    # or more wild
+                    if current_card.color_type == last_card_played.color_type \
+                            or current_card.card_type in [CardType.WILD_DRAW_FOUR, CardType.WILD]:
                         legal_card_responses.append(current_card)
-                else:
-                    # If a draw, reverse/skip, skip - you can only play the same card back
-                    # or draw/skip your turn
-                    if current_card.card_type == last_card_played.card_type:
+                elif last_card_played.card_type == CardType.DRAW_TWO:
+                    # Draws can be stacked
+                    if current_card.card_type == last_card_played.card_type \
+                            and current_card.color_type == last_card_played.color_type:
                         legal_card_responses.append(current_card)
+                elif last_card_played.card_type == CardType.REVERSE:
+                    if current_card.color_type == last_card_played.color_type \
+                            or current_card.card_type in [CardType.WILD_DRAW_FOUR, CardType.WILD]:
+                        legal_card_responses.append(current_card)
+                elif last_card_played.card_type == CardType.SKIP:
+                    if self._did_player_skip:
+                        if current_card.color_type == last_card_played.color_type \
+                                or current_card.card_type in [CardType.WILD_DRAW_FOUR, CardType.WILD]:
+                            legal_card_responses.append(current_card)
         return legal_card_responses
 
     def __is_color_change(self) -> bool:
@@ -153,7 +166,7 @@ class GameEngine:
             return False
 
     def __draw_card_to_hand(self, game_player: GamePlayer, amount_to_draw: int):
-        cards_drawn = self.__draw_cards(amount_to_draw)
+        cards_drawn = self.__draw_cards(amount_to_draw, False)
 
         # This should work now that I added a setter property on GamePlayer.hand
         game_player.hand.extend(cards_drawn)
@@ -181,11 +194,26 @@ class GameEngine:
 
     def __handle_stacked_draws(self, game_player: GamePlayer):
         # Needs to handle stacked draws
-        self._stacked_draw_card_count = 0
+        if self._are_draw_cards_stacked:
+            self._are_draw_cards_stacked = False
+            cards_to_draw = 0
+            draw_card_type_stacked = self._card_pile[-2]
+            for card in reversed(self._card_pile):
+                if card.card_type in [CardType.WILD_DRAW_FOUR]:
+                    cards_to_draw += 4
+                if card.card_type in [CardType.DRAW_TWO]:
+                    cards_to_draw += 2
+                if draw_card_type_stacked.card_type != card.card_type:
+                    break
+            self.__draw_card_to_hand(game_player, cards_to_draw)
 
-    def __handle_reverse(self):
-        # Needs implementation
-        pass
+    def __order_of_players_reversed(self, players_in_round: List[GamePlayer], index: int) -> List[GamePlayer]:
+        new_end_of_list = players_in_round[index]
+        first_half_reversed_list = list(reversed(players_in_round[:index]))
+        second_half_reversed_list = list(reversed(players_in_round[index + 1:]))
+        first_half_reversed_list.extend(second_half_reversed_list)
+        first_half_reversed_list.append(new_end_of_list)
+        return first_half_reversed_list
 
     def start(self) -> GamePlayer:
         current_round: int = 0
@@ -207,106 +235,121 @@ class GameEngine:
 
                 self.__first_card_draw()
 
-                # Use while loop since we are missing with the order of round_players
-                # Examples: Reverses in > 2 players and Draw 4s
+                # Use while loop since we are messing with the order of round_players while iterating over it
+                # Examples: Reverses in > 2 players
                 # Main game loop starts here, loop through each player until a player has 0 cards.
                 i = 0
                 while i < len(round_players):
 
-                    active_player = round_players[i].player
+                    active_player = round_players[i]
+
+                    # Adjust iterator for while loop
+                    if i == len(round_players) - 1:
+                        i = 0
+                    else:
+                        i += 1
 
                     # create PlayerGameHelper
-                    active_player_game_helper = self.__create_player_game_helper(round_players[i])
+                    active_player_game_helper = self.__create_player_game_helper(active_player)
                     # PlayerGameHelper is only for this turn for this player
-                    round_players[i].player.set_game_helper(active_player_game_helper)
-                    current_game_helper = round_players[i].player.get_game_helper()
+                    active_player.player.set_game_helper(active_player_game_helper)
+                    current_game_helper = active_player.player.get_game_helper()
 
                     last_card_played = self._card_pile[-1]
-                    player_action = round_players[i].player.take_turn()
+                    player_action = active_player.player.take_turn()
                     self._card_played = player_action.card
 
                     # check what was played is legal and from their hand AND they aren't skipping
                     if player_action.action == ActionType.PLAY:
                         legal_responses = self.__get_legal_response_cards(current_game_helper)
-                        if player_action.card not in legal_responses:
+                        if self._card_played not in legal_responses:
                             # Logic here to draw, reverse/skip, skip in case they don't respond with a matching card
                             if last_card_played.card_type in [CardType.DRAW_TWO, CardType.REVERSE,
                                                               CardType.SKIP, CardType.WILD_DRAW_FOUR]:
-                                print('You don''t have this card in your hand: {}'
-                                      .format(self.last_card_played.card_type.value))
-                                if last_card_played.card_type in [CardType.SKIP, CardType.REVERSE]:
-                                    # Reverse logic here for > 2 ppl game and stacked Reverses
-                                    print('You have to skip your turn')
+                                print('You don''t have this card in your hand: {}, the last card played was: {}'
+                                      .format(self._card_played.get_card_text(), last_card_played.get_card_text()))
 
+                                if last_card_played.card_type == CardType.SKIP:
+                                    self._did_player_skip = True
+                                    print('You have to skip your turn')
+                                elif last_card_played.card_type == CardType.REVERSE:
+                                    if len(round_players) > 2:
+                                        # We only reverse if more than 2 players
+                                        round_players = self.__order_of_players_reversed(round_players, i)
                                 elif last_card_played.card_type in [CardType.DRAW_TWO, CardType.WILD_DRAW_FOUR]:
                                     print('You have to draw and skip your turn')
                                     # Draw logic if stack Draws
-                                    if last_card_played.card_type == CardType.DRAW_TWO:
-                                        self.__draw_card_to_hand(round_players[i], 2)
-                                    else:
-                                        self.__draw_card_to_hand(round_players[i], 4)
+                                    self.__handle_stacked_draws(active_player)
 
-                                self.__handle_stacked_draws(round_players[i])
                                 continue
                             else:
-                                if player_action.card is None:
+                                if self._card_played is None:
                                     print('ERROR')
-                                if player_action.card.card_type is not None:
+                                if self._card_played.card_type is not None:
                                     print('ILLEGAL play or this card is not in your hand, tsk tsk!\n'
                                           'Type: {}  \n Drawing a card and skipping your turn instead'
-                                          .format(player_action.card.card_type.value))
-                                self.__draw_card_to_hand(round_players[i], 1)
-
-                                self.__handle_stacked_draws(round_players[i])
+                                          .format(self._card_played.card_type.value))
+                                self.__draw_card_to_hand(active_player, 1)
+                                self.__handle_stacked_draws(active_player)
                                 continue
                         else:
-                            # IT IS LEGAL remove card from hand (Except: draw two, reverse, skip, wild +4, wild)
+                            # IT IS LEGAL remove card from hand
                             # This card can be rightfully added to the pile
                             self._card_pile.append(self._card_played)
-                            # We can stack Reverses and Draw +4(Wild)/+2 cards
-                            if last_card_played.card_type == player_action.card.card_type:
-                                if last_card_played.card_type \
-                                        and self._card_played.card_type in [CardType.DRAW_TWO, CardType.WILD_DRAW_FOUR]:
-                                    self._stacked_draw_card_count += 1
-                                if len(round_players) > 2 \
-                                        and last_card_played.card_type == CardType.REVERSE \
-                                        and self._card_played.card_type == CardType.REVERSE:
-                                    # encapsulate in handle reverse
-                                    new_end_of_list = round_players[i]
-                                    first_reversed_list = list(reversed(round_players[:i]))
-                                    second_reversed_list = list(reversed(round_players[i + 1:]))
-                                    first_reversed_list.extend(second_reversed_list)
-                                    first_reversed_list.append(new_end_of_list)
-                                    round_players = first_reversed_list
 
-                        # Remove the card from the player's hand
-                        for index, card in enumerate(round_players[i].hand):
-                            if card.card_type == self._card_played.card_type \
-                                    and card.color_type == self._card_played.color_type:
-                                del round_players[i].hand[index]
-                                break
+                            # Skip is no longer on top of the card pile
+                            self._did_player_skip = False
 
-                else:
-                    if last_card_played == CardType.SKIP:
-                        print("A skip card was played and the player did skip their turn")
-                    elif last_card_played == CardType.REVERSE:
-                        # Reverse logic here for > 2 ppl game
-                        print("A reverse card was played and the player did skip their turn")
+                            # We can stack Draw +4(Wild)/+2 cards, and we can reply using Reverse
+                            if last_card_played.card_type in [CardType.DRAW_TWO, CardType.WILD_DRAW_FOUR]:
+                                if last_card_played.card_type == self._card_played.card_type:
+                                    self._are_draw_cards_stacked = True
+                            else:
+                                self.__handle_stacked_draws(active_player)
+
+                            if len(round_players) > 2 \
+                                    and last_card_played.card_type == CardType.REVERSE \
+                                    and self._card_played.card_type == CardType.REVERSE:
+                                # We only reverse if more than 2 players
+                                round_players = self.__order_of_players_reversed(round_players, i)
+
+                            # Remove the card from the player's hand
+                            for index, card in enumerate(active_player.hand):
+                                if card.card_type == self._card_played.card_type \
+                                        and card.color_type == self._card_played.color_type:
+                                    del active_player.hand[index]
+                                    break
+
                     else:
-                        # skip and draw logic here
-                        self.__draw_card_to_hand(round_players[i], 1)
-                        print('Player drew a card and skipped their turn')
-                        self.__handle_stacked_draws(round_players[i])
+                        if last_card_played == CardType.SKIP:
+                            self._did_player_skip = True
+                            print("A skip card was played and the player did skip their turn")
+                        elif last_card_played == CardType.REVERSE:
+                            # Reverse logic here for > 2 ppl game
+                            if len(round_players) > 2 \
+                                    and last_card_played.card_type == CardType.REVERSE:
+                                # encapsulate in handle reverse
+                                round_players = self.__order_of_players_reversed(round_players, i)
+                            print("A reverse card was played and the player did skip their turn")
+                        else:
+                            # skip and draw logic here
+                            self.__draw_card_to_hand(active_player, 1)
+                            print(
+                                '{} drew a card and skipped their turn'.format(active_player.player.get_player_name()))
+                            self._did_player_skip = True
+                            if last_card_played in [CardType.DRAW_TWO, CardType.WILD_DRAW_FOUR]:
+                                self.__handle_stacked_draws(active_player)
+
                         continue
 
-                print('{} uses action {}'.format(active_player.get_player_name(), player_action.action))
-                print('{}'.format(player_action.card.get_card_text()))
+                    print('{} uses action {}'.format(active_player.player.get_player_name(), player_action.action))
+                    print('{}'.format(self._card_played.get_card_text()))
 
-                # After the card has been played, if that player has no more cards, they win the round.
-                if len(round_players[i].hand) <= 0:
-                    round_won = True
-                    print('{} won the round!'.format(active_player.get_player_name()))
-                    round_winners_player_ids.append(round_players[i].player_id)
+                    # After the card has been played, if that player has no more cards, they win the round.
+                    if len(active_player.hand) <= 0:
+                        round_won = True
+                        print('{} won the round!'.format(active_player.player.get_player_name()))
+                        round_winners_player_ids.append(active_player.player_id)
 
         # After all rounds have been played, handle any Match over logic here
         print('Match is over!')
