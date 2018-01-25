@@ -3,16 +3,17 @@ from core.game.IPlayer import IPlayer
 from core.game.GameEngineHelper import GameEngineHelper
 from core.game.PlayerGameHelper import PlayerGameHelper
 from core.game.GamePlayer import GamePlayer
+from typing import List
 from core.game.ActionType import ActionType
 from core.game.CardType import CardType
 from core.game.ColorType import ColorType
 from random import shuffle
 from collections import Counter
 
-INITIAL_HAND_SIZE = 3
-MIN_REQUIRED_PLAYERS = 2
-MAX_REQUIRED_PLAYERS = 10
-DECK_SIZE = 108
+INITIAL_HAND_SIZE: int = 7
+MIN_REQUIRED_PLAYERS: int = 2
+MAX_REQUIRED_PLAYERS: int = 10
+DECK_SIZE: int = 108
 
 
 class GameEngine:

@@ -8,13 +8,13 @@ from core.game.ColorType import ColorType
 from core.game.Card import Card
 
 
-class RandomPlayer(IPlayer):
+class RandomPlayer2(IPlayer):
     """
     Player's class implemented version of get_player_name.
     """
 
     def get_player_name(self) -> str:
-        return 'Rando Calrissian'
+        return 'Rando Too'
 
     """
     Implementation method of take turn from IPlayer interface. This will
@@ -22,7 +22,6 @@ class RandomPlayer(IPlayer):
     a card based on color then value and finally it will play a wild
     card if one is available otherwise it will skip.
     """
-
     def take_turn(self) -> CardAction:
         last_card_played = self.get_game_helper().get_last_card_played()
         my_hand = self.get_game_helper().get_hand()
