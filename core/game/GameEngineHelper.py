@@ -1,7 +1,6 @@
 from core.game.Card import Card
 from core.game.ColorType import ColorType
 from core.game.CardType import CardType
-from typing import List
 from random import shuffle
 
 WILD_CARD_COUNT = 4
@@ -11,8 +10,8 @@ COLOR_CARD_COUNT = 2
 
 class GameEngineHelper:
     @staticmethod
-    def create_game_deck() -> List[Card]:
-        deck: List[Card] = []
+    def create_game_deck():
+        deck = []
         for color_type in ColorType:
             if color_type == ColorType.BLACK:
                 for black_card_type in GameEngineHelper.get_wild_cards():
@@ -29,16 +28,16 @@ class GameEngineHelper:
         return deck
 
     @staticmethod
-    def get_color_cards() -> List[CardType]:
+    def get_color_cards():
         color_cards = [CardType.ZERO, CardType.ONE, CardType.TWO, CardType.THREE, CardType.FOUR, CardType.FIVE,
                        CardType.SIX, CardType.SEVEN, CardType.EIGHT, CardType.NINE]
         color_cards.extend(GameEngineHelper.get_action_cards())
         return color_cards
 
     @staticmethod
-    def get_action_cards() -> List[CardType]:
+    def get_action_cards():
         return [CardType.DRAW_TWO, CardType.REVERSE, CardType.SKIP]
 
     @staticmethod
-    def get_wild_cards() -> List[CardType]:
+    def get_wild_cards():
         return [CardType.WILD_DRAW_FOUR, CardType.WILD]
