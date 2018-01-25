@@ -29,16 +29,17 @@ class RandomPlayer(IPlayer):
         matched_cards_on_color = []
         wild_cards = []
         if last_card_played.card_type not in [CardType.DRAW_TWO, CardType.REVERSE, CardType.SKIP,
-                              CardType.WILD, CardType.WILD_DRAW_FOUR]:
+                                              CardType.WILD, CardType.WILD_DRAW_FOUR]:
             matched_cards_on_color = [c for c in my_hand if c.color_type == last_card_played.color_type]
         matched_cards_on_value = [c for c in my_hand if c.card_type == last_card_played.card_type]
-        matched_cards_on_value_and_color = [c for c in matched_cards_on_value if c.color_type == last_card_played.color_type]
+        matched_cards_on_value_and_color = [c for c in matched_cards_on_value if
+                                            c.color_type == last_card_played.color_type]
         if last_card_played.card_type not in [CardType.DRAW_TWO, CardType.WILD_DRAW_FOUR]:
             wild_cards = [c for c in my_hand if c.card_type == CardType.WILD or c.card_type == CardType.WILD_DRAW_FOUR]
         if len(matched_cards_on_color) > 0:
             return CardAction(ActionType.PLAY, random.choice(matched_cards_on_color))
         elif len(wild_cards) > 0:
-            random_wild_card: Card = random.choice(wild_cards)
+            random_wild_card = random.choice(wild_cards)
             # Set random color for the wild card
             random_wild_card.color_type = random.choice(
                 [ColorType.BLUE, ColorType.GREEN, ColorType.RED, ColorType.YELLOW])

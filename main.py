@@ -4,8 +4,9 @@ from Player import Player
 # from players.HardPlayer import Player as HardPlayer
 # from players.MediumPlayer import Player as MediumPlayer
 from players.RandomPlayer import RandomPlayer
+from players.RandomPlayer2 import RandomPlayer2
 
-players = [RandomPlayer(), RandomPlayer()]
+players = [RandomPlayer(), RandomPlayer2()]
 
 rounds = 3
 # Rounds can't be even, we don't want ties
